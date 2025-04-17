@@ -150,7 +150,7 @@ export default function DesignCodeForm() {
       </div>
 
       {showStoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-500/30 dark:bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow max-h-[90vh] overflow-y-auto w-full max-w-md">
             <h2 className="text-lg font-semibold mb-4">층별 높이 및 질량 입력</h2>
             <div className="grid grid-cols-3 gap-2 font-semibold">
