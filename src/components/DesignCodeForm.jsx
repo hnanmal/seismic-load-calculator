@@ -3,12 +3,19 @@ import InputField from "./InputField";
 import SelectField from "./SelectField";
 import SpectrumChart from "./SpectrumChart";
 
-
 const riskIeMap = {
   I: 1.0,
   II: 1.0,
   III: 1.25,
   IV: 1.5,
+};
+
+const FaTable = {
+  A: 0.8, B: 1.0, C: 1.2, D: 1.6, E: 2.5,
+};
+
+const FvTable = {
+  A: 0.8, B: 1.0, C: 1.5, D: 2.4, E: 3.5,
 };
 
 export default function DesignCodeForm() {
@@ -50,8 +57,22 @@ export default function DesignCodeForm() {
   };
 
   const handleCalculate = () => {
-    const { sds, r_x, r_y, ie } = form;
-    const sdsNum = parseFloat(sds);
+    let sdsNum;
+    if (code === "Eurocode8") {
+      sdsNum = parseFloat(form.ag);
+    } else {
+      const ss = parseFloat(form.ss);
+      const s1 = parseFloat(form.s1);
+      const fa = FaTable[form.siteClass] || 1.0;
+      const fv = FvTable[form.siteClass] || 1.0;
+      const sds = (fa * ss * 2) / 3;
+      const sd1 = (fv * s1 * 2) / 3;
+      form.sds = sds.toFixed(3);
+      form.sd1 = sd1.toFixed(3);
+      sdsNum = sds;
+    }
+
+    const { r_x, r_y, ie } = form;
     const rx = parseFloat(r_x);
     const ry = parseFloat(r_y);
     const ieNum = parseFloat(ie);
@@ -85,8 +106,8 @@ export default function DesignCodeForm() {
     let spectrum = [];
 
     if (code === "Eurocode8") {
-      const ag = sdsNum; // Eurocode에서 SDS를 ag로 간주
-      const S = 1.2; // 지반종류 C 기준 (향후 form.siteClass에 따라 바꿀 수 있음)
+      const ag = sdsNum;
+      const S = 1.2;
       const TB = 0.15, TC = 0.6, TD = 2.0;
 
       spectrum = Array.from({ length: 100 }, (_, i) => {
@@ -99,15 +120,16 @@ export default function DesignCodeForm() {
         return { T, Sa };
       });
     } else {
-      const t0 = 0.2 * parseFloat(form.sd1) / sdsNum;
-      const ts = parseFloat(form.sd1) / sdsNum;
+      const sd1 = parseFloat(form.sd1);
+      const t0 = 0.2 * sd1 / sdsNum;
+      const ts = sd1 / sdsNum;
 
       spectrum = Array.from({ length: 100 }, (_, i) => {
         const T = i * 0.05;
         let Sa = 0;
         if (T <= t0) Sa = sdsNum * (0.4 + 0.6 * (T / t0));
         else if (T <= ts) Sa = sdsNum;
-        else Sa = parseFloat(form.sd1) / T;
+        else Sa = sd1 / T;
         return { T, Sa };
       });
     }
@@ -124,7 +146,9 @@ export default function DesignCodeForm() {
           value={code}
           onChange={(e) => {
             setCode(e.target.value);
-            setForm(code === "ASCE7" || code === "KDS" ? { riskCategory: "II", ie: 1.0, storyCount: 5 } : {});
+            setForm(e.target.value === "ASCE7" || e.target.value === "KDS"
+              ? { riskCategory: "II", ie: 1.0, storyCount: 5 }
+              : {});
             setResults(null);
           }}
         >
@@ -150,7 +174,7 @@ export default function DesignCodeForm() {
       </div>
 
       {showStoryModal && (
-        <div className="fixed inset-0 bg-gray-500/30 dark:bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-500/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded shadow max-h-[90vh] overflow-y-auto w-full max-w-md">
             <h2 className="text-lg font-semibold mb-4">층별 높이 및 질량 입력</h2>
             <div className="grid grid-cols-3 gap-2 font-semibold">
@@ -187,19 +211,22 @@ export default function DesignCodeForm() {
         </div>
       )}
 
-      {(code === "ASCE7" || code === "KDS" || code === "Eurocode8") && (
-        <div className="space-y-4">
-          <SelectField
-            label={code === "Eurocode8" ? "Ground Type" : "Site Class"}
-            name="siteClass"
-            value={form.siteClass || ""}
-            options={code === "KDS" ? ["S1", "S2", "S3"] : ["A", "B", "C", "D", "E"]}
-            onChange={handleChange}
-          />
+      <div className="space-y-4">
+        <SelectField
+          label={code === "Eurocode8" ? "Ground Type" : "Site Class"}
+          name="siteClass"
+          value={form.siteClass || ""}
+          options={code === "KDS" ? ["S1", "S2", "S3"] : ["A", "B", "C", "D", "E"]}
+          onChange={handleChange}
+        />
 
-          {code === "Eurocode8" ? (
+        {code === "Eurocode8" ? (
+          <>
+            <InputField label="ag (설계 기초 가속도)" name="ag" value={form.ag || ""} onChange={handleChange} />
             <InputField label="γI (Importance Factor)" name="ie" value={form.ie || ""} onChange={handleChange} />
-          ) : (
+          </>
+        ) : (
+          <>
             <SelectField
               label="Risk Category"
               name="riskCategory"
@@ -207,26 +234,23 @@ export default function DesignCodeForm() {
               options={["I", "II", "III", "IV"]}
               onChange={handleChange}
             />
-          )}
+            <InputField label="Ss (단주기 위험계수)" name="ss" value={form.ss || ""} onChange={handleChange} />
+            <InputField label="S1 (장주기 위험계수)" name="s1" value={form.s1 || ""} onChange={handleChange} />
+            <InputField label="SDS (자동계산)" name="sds" value={form.sds || ""} onChange={handleChange} readOnly />
+            <InputField label="SD1 (자동계산)" name="sd1" value={form.sd1 || ""} onChange={handleChange} readOnly />
+          </>
+        )}
 
-          {form.ie && (
-            <div className="text-sm text-gray-500 dark:text-gray-300">
-              중요도 계수 Ie: <span className="font-semibold">{form.ie}</span>
-            </div>
-          )}
+        <InputField label="R (X 방향)" name="r_x" value={form.r_x || ""} onChange={handleChange} />
+        <InputField label="R (Y 방향)" name="r_y" value={form.r_y || ""} onChange={handleChange} />
 
-          <InputField label="R (X 방향)" name="r_x" value={form.r_x || ""} onChange={handleChange} />
-          <InputField label="R (Y 방향)" name="r_y" value={form.r_y || ""} onChange={handleChange} />
-          <InputField label="SDS (단주기)" name="sds" value={form.sds || ""} onChange={handleChange} />
-          <InputField label="SD1 (장주기)" name="sd1" value={form.sd1 || ""} onChange={handleChange} />
-          <div className="text-sm text-gray-700 dark:text-gray-200">
-  구조물 중량 W (kN):
-  <span className="font-semibold ml-2">
-    {storyData.reduce((sum, s) => sum + (s.weight || 0), 0).toLocaleString()} kN
-  </span>
-</div>
+        <div className="text-sm text-gray-700 dark:text-gray-200">
+          구조물 중량 W (kN):
+          <span className="font-semibold ml-2">
+            {storyData.reduce((sum, s) => sum + (s.weight || 0), 0).toLocaleString()} kN
+          </span>
         </div>
-      )}
+      </div>
 
       <div className="pt-4">
         <button
